@@ -24,12 +24,25 @@ const receitas = [
 ]
 
 app.get("/receitas", (req, res) => {
+    const { ingrediente } = req.query
+
+    if (ingrediente) {
+        const receitasFiltradas = receitas.filter(
+            receita => receita.ingredientes.toLowerCase().includes(ingrediente.toLowerCase())
+        )
+        return res.send(receitasFiltradas)
+    }
+
     res.send(receitas)
 })
 
 app.get("/receitas/:id", (req, res) => {
     const { id } = req.params
-    // const id = req.params.id
+    const { auth } = req.headers
+
+    if (auth !== "Let") {
+        return res.sendStatus(401)
+    }
 
     const receita = receitas.find((item) => item.id === Number(id))
     res.send(receita)

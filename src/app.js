@@ -38,10 +38,14 @@ app.get("/receitas/:id", (req, res) => {
 app.post("/receitas", (req, res) => {
     const { titulo, ingredientes, preparo } = req.body
 
-    const novaReceita = { id: receitas.length + 1, titulo, ingredientes, preparo}
+    if (!titulo || !ingredientes || !preparo) {
+        return res.status(422).send("Todos os campos são obrigatórios")
+    }
+
+    const novaReceita = { id: receitas.length + 1, titulo, ingredientes, preparo }
 
     receitas.push(novaReceita)
-    res.send("Deu certo!")
+    res.sendStatus(201)
 })
 
 const PORT = 4000

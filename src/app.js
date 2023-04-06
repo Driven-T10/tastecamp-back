@@ -1,8 +1,12 @@
 import express from "express"
 import cors from "cors"
 
-const app = express() // app do servidor
+// Criação do App Servidor
+const app = express()
+
+// Configurações
 app.use(cors())
+app.use(express.json())
 
 const receitas = [
     {
@@ -29,6 +33,15 @@ app.get("/receitas/:id", (req, res) => {
 
     const receita = receitas.find((item) => item.id === Number(id))
     res.send(receita)
+})
+
+app.post("/receitas", (req, res) => {
+    const { titulo, ingredientes, preparo } = req.body
+
+    const novaReceita = { id: receitas.length + 1, titulo, ingredientes, preparo}
+
+    receitas.push(novaReceita)
+    res.send("Deu certo!")
 })
 
 const PORT = 4000

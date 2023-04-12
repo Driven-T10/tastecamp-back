@@ -1,5 +1,7 @@
 import express from "express"
 import cors from "cors"
+import { MongoClient } from "mongodb"
+import dotenv from "dotenv"
 
 // Criação do App Servidor
 const app = express()
@@ -7,6 +9,14 @@ const app = express()
 // Configurações
 app.use(cors())
 app.use(express.json())
+dotenv.config()
+
+// Conexão com o banco de dados
+let db
+const mongoClient = new MongoClient(process.env.DATABASE_URL)
+mongoClient.connect()
+    .then(() => db = mongoClient.db())
+    .catch((err) => console.log(err.message))
 
 const receitas = [
     {
@@ -24,16 +34,9 @@ const receitas = [
 ]
 
 app.get("/receitas", (req, res) => {
-    const { ingrediente } = req.query
-
-    if (ingrediente) {
-        const receitasFiltradas = receitas.filter(
-            receita => receita.ingredientes.toLowerCase().includes(ingrediente.toLowerCase())
-        )
-        return res.send(receitasFiltradas)
-    }
-
-    res.send(receitas)
+    db.collection("receitas").find().toArray()
+        .then(receitas => res.send(receitas))
+        .catch(err => res.status(500).send(err.message))
 })
 
 app.get("/receitas/:id", (req, res) => {
@@ -55,10 +58,10 @@ app.post("/receitas", (req, res) => {
         return res.status(422).send("Todos os campos são obrigatórios")
     }
 
-    const novaReceita = { id: receitas.length + 1, titulo, ingredientes, preparo }
-
-    receitas.push(novaReceita)
-    res.sendStatus(201)
+    const novaReceita = { titulo, ingredientes, preparo }
+    db.collection("receitas").insertOne(novaReceita)
+        .then(() => res.sendStatus(201))
+        .catch(err => res.status(500).send(err.message))
 })
 
 const PORT = 4000

@@ -36,7 +36,9 @@ app.get("/receitas/:id", (req, res) => {
         .catch((err) => res.status(500).send(err.message))
 })
 
+// função POST
 app.post("/receitas", (req, res) => {
+    // função de callback do POST
     const { titulo, ingredientes, preparo } = req.body
 
     if (!titulo || !ingredientes || !preparo) {
@@ -44,10 +46,21 @@ app.post("/receitas", (req, res) => {
     }
 
     const novaReceita = { titulo, ingredientes, preparo }
-    db.collection("receitas").insertOne(novaReceita)
-        .then(() => res.sendStatus(201))
-        .catch(err => res.status(500).send(err.message))
+
+    db.collection("receitas").findOne({ titulo: titulo })
+        // sucesso da requisição findOne
+        .then((data) => {
+            if (data) {
+                return res.status(409).send("Essa receita já existe!! Escolha outro título.")
+            } else {
+                db.collection("receitas").insertOne(novaReceita)
+                    .then(() => res.sendStatus(201)) // sucesso do insertOne
+                    .catch(err => res.status(500).send(err.message)) // erro do insertOne
+            }
+        })
+        .catch(err => res.status(500).send(err.message)) // erro da findOne
 })
+
 
 // Deixa o app escutando, à espera de requisições
 const PORT = 4000

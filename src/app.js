@@ -2,6 +2,7 @@ import express from "express"
 import cors from "cors"
 import { MongoClient, ObjectId } from "mongodb"
 import dotenv from "dotenv"
+import joi from "joi"
 
 // Criação do App Servidor
 const app = express()
@@ -47,17 +48,24 @@ app.get("/receitas/:id", async (req, res) => {
 app.post("/receitas", async (req, res) => {
     const { titulo, ingredientes, preparo } = req.body
 
-    if (!titulo || !ingredientes || !preparo) {
-        return res.status(422).send("Todos os campos são obrigatórios")
-    }
+    const receitaSchema = joi.object({
+        titulo: joi.string().required(),
+        ingredientes: joi.string().required(),
+        preparo: joi.string().required()
+    })
 
-    const novaReceita = { titulo, ingredientes, preparo }
+    const validation = receitaSchema.validate(req.body, { abortEarly: false })
+
+    if (validation.error) {
+        const errors = validation.error.details.map(detail => detail.message)
+        return res.status(422).send(errors)
+    }
 
     try {
         const recipe = await db.collection("receitas").findOne({ titulo: titulo })
         if (recipe) return res.status(409).send("Essa receita já existe!")
 
-        await db.collection("receitas").insertOne(novaReceita)
+        await db.collection("receitas").insertOne(req.body)
         res.sendStatus(201)
     } catch (err) {
         res.status(500).send(err.message)
@@ -92,17 +100,24 @@ app.delete("/receitas/muitas/:filtroIngredientes", async (req, res) => {
 
 app.put("/receitas/:id", async (req, res) => {
     const { id } = req.params
-    const { titulo, preparo, ingredientes } = req.body
 
-    const receitaEditada = {}
-    if (titulo) receitaEditada.titulo = titulo
-    if (preparo) receitaEditada.preparo = preparo
-    if (ingredientes) receitaEditada.ingredientes = ingredientes
+    const receitaSchema = joi.object({
+        titulo: joi.string(),
+        ingredientes: joi.string(),
+        preparo: joi.string()
+    })
+
+    const validation = receitaSchema.validate(req.body, { abortEarly: false })
+
+    if (validation.error) {
+        const errors = validation.error.details.map(detail => detail.message)
+        return res.status(422).send(errors)
+    }
 
     try {
         const result = await db.collection("receitas").updateOne(
             { _id: new ObjectId(id) },
-            { $set: receitaEditada }
+            { $set: req.body }
         )
         if (result.matchedCount === 0) return res.status(404).send("Esse item não existe!")
         res.send("Receita atualizada!")
@@ -113,17 +128,26 @@ app.put("/receitas/:id", async (req, res) => {
 
 app.put("/receitas/muitas/:filtroIngredientes", async (req, res) => {
     const { filtroIngredientes } = req.params
-    const { titulo, preparo, ingredientes } = req.body
 
-    const receitaEditada = {}
-    if (titulo) receitaEditada.titulo = titulo
-    if (preparo) receitaEditada.preparo = preparo
-    if (ingredientes) receitaEditada.ingredientes = ingredientes
+    const receitaSchema = joi.object({
+        titulo: joi.string(),
+        ingredientes: joi.string(),
+        preparo: joi.string()
+    })
+
+    const validation = receitaSchema.validate(req.body, { abortEarly: false })
+    console.log(validation)
+
+    if (validation.error) {
+        const errors = validation.error.details.map(detail => detail.message)
+        console.log(errors)
+        return res.status(422).send(errors)
+    }
 
     try {
         const result = await db.collection("receitas").updateMany(
             { ingredientes: { $regex: filtroIngredientes, $options: "i" } },
-            { $set: receitaEditada }
+            { $set: req.body }
         )
 
         if (result.matchedCount === 0) return res.status(404).send("Não há nenhuma receita com esse filtro!")

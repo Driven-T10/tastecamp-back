@@ -4,6 +4,7 @@ import { MongoClient, ObjectId } from "mongodb"
 import dotenv from "dotenv"
 import joi from "joi"
 import bcrypt from "bcrypt"
+import { v4 as uuid } from "uuid"
 
 // Criação do App Servidor
 const app = express()
@@ -54,6 +55,10 @@ app.get("/receitas/:id", async (req, res) => {
 
 app.post("/receitas", async (req, res) => {
     const { titulo, ingredientes, preparo } = req.body
+    const { authorization } = req.headers
+    const token = authorization?.replace("Bearer ", "")
+
+    if (!token) return res.sendStatus(401)
 
     const receitaSchema = joi.object({
         titulo: joi.string().required(),
@@ -69,10 +74,13 @@ app.post("/receitas", async (req, res) => {
     }
 
     try {
+        const sessao = await db.collection("sessoes").findOne({ token })
+        if (!sessao) return res.sendStatus(401)
+
         const recipe = await db.collection("receitas").findOne({ titulo: titulo })
         if (recipe) return res.status(409).send("Essa receita já existe!")
 
-        await db.collection("receitas").insertOne(req.body)
+        await db.collection("receitas").insertOne({ ...req.body, idUsuario: sessao.idUsuario })
         res.sendStatus(201)
     } catch (err) {
         res.status(500).send(err.message)
@@ -107,6 +115,10 @@ app.delete("/receitas/muitas/:filtroIngredientes", async (req, res) => {
 
 app.put("/receitas/:id", async (req, res) => {
     const { id } = req.params
+    const { authorization } = req.headers
+    const token = authorization?.replace("Bearer ", "")
+
+    if (!token) return res.sendStatus(401)
 
     const receitaSchema = joi.object({
         titulo: joi.string(),
@@ -122,11 +134,21 @@ app.put("/receitas/:id", async (req, res) => {
     }
 
     try {
-        const result = await db.collection("receitas").updateOne(
+        // Verificar se o token recebido é válido
+        const sessao = await db.collection("sessoes").findOne({ token })
+        if (!sessao) return res.sendStatus(401)
+
+        // Procurar receita que vai ser editada
+        const receita = await db.collection("receitas").findOne({ _id: new ObjectId(id) })
+        if (!receita) return res.sendStatus(404)
+
+        // Se o criador da receita não for a pessoa que tentou editar, dá um erro
+        if (!receita.idUsuario.equals(sessao.idUsuario)) return res.sendStatus(401)
+
+        await db.collection("sessions").updateOne(
             { _id: new ObjectId(id) },
             { $set: req.body }
         )
-        if (result.matchedCount === 0) return res.status(404).send("Esse item não existe!")
         res.send("Receita atualizada!")
     } catch (err) {
         res.status(500).send(err.message)
@@ -198,7 +220,9 @@ app.post("/sign-in", async (req, res) => {
         const senhaEstaCorreta = bcrypt.compareSync(senha, usuario.senha)
         if (!senhaEstaCorreta) return res.status(401).send("Senha incorreta")
 
-        res.sendStatus(200)
+        const token = uuid()
+        await db.collection("sessoes").insertOne({ token, idUsuario: usuario._id })
+        res.send(token)
     } catch (err) {
         res.status(500).send(err.message)
     }

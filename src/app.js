@@ -1,10 +1,10 @@
 import express from "express"
 import cors from "cors"
-import { MongoClient, ObjectId } from "mongodb"
+import { MongoClient } from "mongodb"
 import dotenv from "dotenv"
 import joi from "joi"
-import bcrypt from "bcrypt"
-import { v4 as uuid } from "uuid"
+import { createReceita, deleteMuitasReceitas, deleteReceita, editMuitasReceitas, editReceitaById, getReceitaById, getReceitas } from "./controllers/receitasController.js"
+import { signin, signup } from "./controllers/usuarioController.js"
 
 // Criação do App Servidor
 const app = express()
@@ -22,211 +22,39 @@ try {
 } catch (err) {
     console.log(err.message)
 }
-const db = mongoClient.db()
+export const db = mongoClient.db()
 
 // Schemas
-const usuarioSchema = joi.object({
+export const usuarioSchema = joi.object({
     nome: joi.string().required(),
     email: joi.string().email().required(),
     senha: joi.string().required().min(3)
 })
 
-// Endpoints
-app.get("/receitas", async (req, res) => {
-    try {
-        const receitas = await db.collection("receitas").find().toArray()
-        res.send(receitas)
-    } catch (err) {
-        res.status(500).send(err.message)
-    }
+export const receitaSchema = joi.object({
+    titulo: joi.string().required(),
+    ingredientes: joi.string().required(),
+    preparo: joi.string().required()
 })
 
-app.get("/receitas/:id", async (req, res) => {
-    const { id } = req.params
+// Rotas
+app.get("/receitas", getReceitas)
 
-    try {
-        const receita = await db.collection("receitas").findOne({ _id: new ObjectId(id) })
-        if (!receita) return res.status(404).send("Receita não existe")
-        res.send(receita)
-    } catch (err) {
-        res.status(500).send(err.message)
-    }
-})
+app.get("/receitas/:id", getReceitaById)
 
-app.post("/receitas", async (req, res) => {
-    const { titulo, ingredientes, preparo } = req.body
-    const { authorization } = req.headers
-    const token = authorization?.replace("Bearer ", "")
+app.post("/receitas", createReceita)
 
-    if (!token) return res.sendStatus(401)
+app.delete("/receitas/:id", deleteReceita)
 
-    const receitaSchema = joi.object({
-        titulo: joi.string().required(),
-        ingredientes: joi.string().required(),
-        preparo: joi.string().required()
-    })
+app.delete("/receitas/muitas/:filtroIngredientes", deleteMuitasReceitas)
 
-    const validation = receitaSchema.validate(req.body, { abortEarly: false })
+app.put("/receitas/:id", editReceitaById)
 
-    if (validation.error) {
-        const errors = validation.error.details.map(detail => detail.message)
-        return res.status(422).send(errors)
-    }
+app.put("/receitas/muitas/:filtroIngredientes", editMuitasReceitas)
 
-    try {
-        const sessao = await db.collection("sessoes").findOne({ token })
-        if (!sessao) return res.sendStatus(401)
+app.post("/sign-up", signup)
 
-        const recipe = await db.collection("receitas").findOne({ titulo: titulo })
-        if (recipe) return res.status(409).send("Essa receita já existe!")
-
-        await db.collection("receitas").insertOne({ ...req.body, idUsuario: sessao.idUsuario })
-        res.sendStatus(201)
-    } catch (err) {
-        res.status(500).send(err.message)
-    }
-})
-
-app.delete("/receitas/:id", async (req, res) => {
-    const { id } = req.params
-
-    try {
-        const result = await db.collection("receitas").deleteOne({ _id: new ObjectId(id) })
-
-        if (result.deletedCount === 0) return res.status(404).send("Esse item não existe!")
-        res.send("Item deletado com sucesso!")
-
-    } catch (err) {
-        res.status(500).send(err.message)
-    }
-})
-
-app.delete("/receitas/muitas/:filtroIngredientes", async (req, res) => {
-    const { filtroIngredientes } = req.params
-
-    try {
-        const result = await db.collection("receitas").deleteMany({ ingredientes: filtroIngredientes })
-        if (result.deletedCount === 0) return res.status(404).send("Não ha receitas com esse critério")
-        res.send("Ites deletados com sucesso")
-    } catch (err) {
-        res.status(500).send(err.message)
-    }
-})
-
-app.put("/receitas/:id", async (req, res) => {
-    const { id } = req.params
-    const { authorization } = req.headers
-    const token = authorization?.replace("Bearer ", "")
-
-    if (!token) return res.sendStatus(401)
-
-    const receitaSchema = joi.object({
-        titulo: joi.string(),
-        ingredientes: joi.string(),
-        preparo: joi.string()
-    })
-
-    const validation = receitaSchema.validate(req.body, { abortEarly: false })
-
-    if (validation.error) {
-        const errors = validation.error.details.map(detail => detail.message)
-        return res.status(422).send(errors)
-    }
-
-    try {
-        // Verificar se o token recebido é válido
-        const sessao = await db.collection("sessoes").findOne({ token })
-        if (!sessao) return res.sendStatus(401)
-
-        // Procurar receita que vai ser editada
-        const receita = await db.collection("receitas").findOne({ _id: new ObjectId(id) })
-        if (!receita) return res.sendStatus(404)
-
-        // Se o criador da receita não for a pessoa que tentou editar, dá um erro
-        if (!receita.idUsuario.equals(sessao.idUsuario)) return res.sendStatus(401)
-
-        await db.collection("sessions").updateOne(
-            { _id: new ObjectId(id) },
-            { $set: req.body }
-        )
-        res.send("Receita atualizada!")
-    } catch (err) {
-        res.status(500).send(err.message)
-    }
-})
-
-app.put("/receitas/muitas/:filtroIngredientes", async (req, res) => {
-    const { filtroIngredientes } = req.params
-
-    const receitaSchema = joi.object({
-        titulo: joi.string(),
-        ingredientes: joi.string(),
-        preparo: joi.string()
-    })
-
-    const validation = receitaSchema.validate(req.body, { abortEarly: false })
-    console.log(validation)
-
-    if (validation.error) {
-        const errors = validation.error.details.map(detail => detail.message)
-        console.log(errors)
-        return res.status(422).send(errors)
-    }
-
-    try {
-        const result = await db.collection("receitas").updateMany(
-            { ingredientes: { $regex: filtroIngredientes, $options: "i" } },
-            { $set: req.body }
-        )
-
-        if (result.matchedCount === 0) return res.status(404).send("Não há nenhuma receita com esse filtro!")
-        res.send("Receitas editadas!")
-
-    } catch (err) {
-        res.status(500).send(err.message)
-    }
-})
-
-app.post("/sign-up", async (req, res) => {
-    const { nome, email, senha } = req.body
-
-    const validation = usuarioSchema.validate(req.body, { abortEarly: false })
-    if (validation.error) {
-        const errors = validation.error.details.map((detail) => detail.message);
-        return res.status(422).send(errors);
-    }
-
-    try {
-        const usuario = await db.collection("usuarios").findOne({ email })
-        if (usuario) return res.status(409).send("E-mail já cadastrado")
-
-        const hash = bcrypt.hashSync(senha, 10)
-
-        await db.collection("usuarios").insertOne({ nome, email, senha: hash })
-        res.sendStatus(201)
-
-    } catch (err) {
-        res.status(500).send(err.message)
-    }
-})
-
-app.post("/sign-in", async (req, res) => {
-    const { email, senha } = req.body
-
-    try {
-        const usuario = await db.collection("usuarios").findOne({ email })
-        if (!usuario) return res.status(401).send("E-mail não cadastrado.")
-
-        const senhaEstaCorreta = bcrypt.compareSync(senha, usuario.senha)
-        if (!senhaEstaCorreta) return res.status(401).send("Senha incorreta")
-
-        const token = uuid()
-        await db.collection("sessoes").insertOne({ token, idUsuario: usuario._id })
-        res.send(token)
-    } catch (err) {
-        res.status(500).send(err.message)
-    }
-})
+app.post("/sign-in", signin)
 
 
 // Deixa o app escutando, à espera de requisições

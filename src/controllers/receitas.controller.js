@@ -1,4 +1,4 @@
-import { db, receitaSchema } from "../app.js"
+import { db } from "../database/database.connection.js"
 import { ObjectId } from "mongodb"
 
 export async function getReceitas(req, res) {
@@ -23,25 +23,13 @@ export async function getReceitaById(req, res) {
 }
 
 export async function createReceita(req, res) {
-    const { titulo, ingredientes, preparo } = req.body
-    const { authorization } = req.headers
-    const token = authorization?.replace("Bearer ", "")
-
-    if (!token) return res.sendStatus(401)
-
-    const validation = receitaSchema.validate(req.body, { abortEarly: false })
-
-    if (validation.error) {
-        const errors = validation.error.details.map(detail => detail.message)
-        return res.status(422).send(errors)
-    }
+    const { titulo } = req.body
 
     try {
-        const sessao = await db.collection("sessoes").findOne({ token })
-        if (!sessao) return res.sendStatus(401)
-
-        const recipe = await db.collection("receitas").findOne({ titulo: titulo })
+        const recipe = await db.collection("receitas").findOne({ titulo })
         if (recipe) return res.status(409).send("Essa receita já existe!")
+
+        const sessao = res.locals.sessao
 
         await db.collection("receitas").insertOne({ ...req.body, idUsuario: sessao.idUsuario })
         res.sendStatus(201)
@@ -78,32 +66,13 @@ export async function deleteMuitasReceitas(req, res) {
 
 export async function editReceitaById(req, res) {
     const { id } = req.params
-    const { authorization } = req.headers
-    const token = authorization?.replace("Bearer ", "")
-
-    if (!token) return res.sendStatus(401)
-
-    const receitaSchema = joi.object({
-        titulo: joi.string(),
-        ingredientes: joi.string(),
-        preparo: joi.string()
-    })
-
-    const validation = receitaSchema.validate(req.body, { abortEarly: false })
-
-    if (validation.error) {
-        const errors = validation.error.details.map(detail => detail.message)
-        return res.status(422).send(errors)
-    }
 
     try {
-        // Verificar se o token recebido é válido
-        const sessao = await db.collection("sessoes").findOne({ token })
-        if (!sessao) return res.sendStatus(401)
-
         // Procurar receita que vai ser editada
         const receita = await db.collection("receitas").findOne({ _id: new ObjectId(id) })
         if (!receita) return res.sendStatus(404)
+
+        const sessao = res.locals.sessao
 
         // Se o criador da receita não for a pessoa que tentou editar, dá um erro
         if (!receita.idUsuario.equals(sessao.idUsuario)) return res.sendStatus(401)
@@ -120,21 +89,6 @@ export async function editReceitaById(req, res) {
 
 export async function editMuitasReceitas(req, res) {
     const { filtroIngredientes } = req.params
-
-    const receitaSchema = joi.object({
-        titulo: joi.string(),
-        ingredientes: joi.string(),
-        preparo: joi.string()
-    })
-
-    const validation = receitaSchema.validate(req.body, { abortEarly: false })
-    console.log(validation)
-
-    if (validation.error) {
-        const errors = validation.error.details.map(detail => detail.message)
-        console.log(errors)
-        return res.status(422).send(errors)
-    }
 
     try {
         const result = await db.collection("receitas").updateMany(

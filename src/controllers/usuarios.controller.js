@@ -1,15 +1,9 @@
-import { db, usuarioSchema } from "../app.js"
+import { db } from "../database/database.connection.js"
 import bcrypt from "bcrypt"
 import { v4 as uuid } from "uuid"
 
 export async function signup(req, res) {
     const { nome, email, senha } = req.body
-
-    const validation = usuarioSchema.validate(req.body, { abortEarly: false })
-    if (validation.error) {
-        const errors = validation.error.details.map((detail) => detail.message);
-        return res.status(422).send(errors);
-    }
 
     try {
         const usuario = await db.collection("usuarios").findOne({ email })
